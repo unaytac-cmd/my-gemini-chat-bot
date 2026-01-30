@@ -17,12 +17,13 @@ except Exception as e:
     st.error(f"Config Error: {e}")
     st.stop()
 
-# Model Setup (Hatasız Versiyon)
+# Model Setup
 if "gemini_model" not in st.session_state:
     try:
+        # 'DYNAMIC' mode, hatanın belirttiği geçerli değerlerden biridir.
         st.session_state.gemini_model = genai.GenerativeModel(
             model_name="models/gemini-2.5-flash",
-            tools=[{"google_search_retrieval": {"dynamic_retrieval_config": {"mode": "unspecified"}}}]
+            tools=[{"google_search_retrieval": {"dynamic_retrieval_config": {"mode": "DYNAMIC"}}}]
         )
     except Exception as e:
         st.error(f"Model Initialization Error: {e}")

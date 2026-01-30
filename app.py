@@ -5,13 +5,13 @@ from dotenv import load_dotenv
 
 # --- Streamlit Sayfa Yapılandırması ---
 st.set_page_config(
-    page_title="Esimde Esim",
+    page_title="Printnest AI",
     layout="centered",
     initial_sidebar_state="collapsed"
 )
 
-st.title("⚡ Esim Ne derse O Olur")
-st.write("Merhaba! Ben Ukbe Esim İçin Bu Arayuzu Tasarladim")
+st.title("Printnest Corporate AI")
+st.write("Welcome to your workspace. How can I assist with your office tasks or printing projects today?")
 
 # --- API Anahtarı Yapılandırması ---
 try:

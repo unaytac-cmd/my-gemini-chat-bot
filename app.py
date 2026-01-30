@@ -7,7 +7,7 @@ from datetime import datetime
 import time
 import requests
 
-# --- 1. FIREBASE BAĞLANTISI (DEĞİŞMEDİ) ---
+# --- 1. FIREBASE BAĞLANTISI ---
 if not firebase_admin._apps:
     try:
         fb_dict = dict(st.secrets["firebase"])
@@ -19,7 +19,7 @@ if not firebase_admin._apps:
 
 db = firestore.client()
 
-# --- 2. ŞİFRE DOĞRULAMA (DEĞİŞMEDİ) ---
+# --- 2. ŞİFRE DOĞRULAMA (API) ---
 def verify_password(email, password):
     try:
         api_key = st.secrets["FIREBASE_WEB_API_KEY"]
@@ -32,7 +32,7 @@ def verify_password(email, password):
     except:
         return None
 
-# --- 3. YARDIMCI FONKSİYONLAR (DEĞİŞMEDİ) ---
+# --- 3. YARDIMCI FONKSİYONLAR ---
 def get_user_threads(user_id):
     try:
         threads = db.collection("users").document(user_id).collection("threads").order_by("updated_at", direction=firestore.Query.DESCENDING).limit(15).stream()
@@ -52,7 +52,7 @@ def save_message_to_db(user_id, thread_id, role, text):
         title = text[:30] + "..." if len(text) > 30 else text
         t_ref.set({"title": title, "updated_at": datetime.now()}, merge=True)
 
-# --- 4. SAYFA AYARLARI VE CSS (ŞEFFAFLIK FİX EKLENDİ) ---
+# --- 4. SAYFA AYARLARI VE CSS ---
 st.set_page_config(page_title="Printnest AI", page_icon="💼", layout="wide")
 
 st.markdown("""
@@ -60,15 +60,8 @@ st.markdown("""
     [data-testid="stSidebar"] { background-color: #f8f9fa; padding-top: 1rem; }
     .stButton>button { border-radius: 8px; }
     #MainMenu {visibility: hidden;} footer {visibility: hidden;}
-    
-    /* ŞEFFAFLIK FİX: Sayfa yenilenirken eski içeriğin şeffaf görünmesini engeller */
-    [data-testid="stAppViewBlockContainer"] {
-        opacity: 1 !important;
-    }
-    .stApp [data-testid="stVerticalBlock"] > div {
-        transition: none !important; /* Blur efektini kapatır */
-    }
-
+    [data-testid="stAppViewBlockContainer"] { opacity: 1 !important; }
+    .stApp [data-testid="stVerticalBlock"] > div { transition: none !important; }
     [data-testid="stHorizontalBlock"] { align-items: center; }
     .feature-card {
         background-color: #f8f9fa; padding: 20px; border-radius: 12px;
@@ -83,7 +76,7 @@ st.markdown("""
 if "user" not in st.session_state: st.session_state.user = None
 if "current_thread_id" not in st.session_state: st.session_state.current_thread_id = None
 
-# --- 5. GİRİŞ & KAYIT EKRANI (DEĞİŞMEDİ) ---
+# --- 5. GİRİŞ & KAYIT EKRANI ---
 if st.session_state.user is None:
     st.markdown("<div style='padding-top: 8vh;'></div>", unsafe_allow_html=True)
     col1, col2 = st.columns([1.2, 1], gap="large")
@@ -118,27 +111,37 @@ if st.session_state.user is None:
                     if access_key == m_key and len(n_pass) >= 6:
                         try:
                             auth.create_user(email=n_email, password=n_pass)
-                            st.success("Kayıt başarılı! Şimdi giriş yapabilirsiniz.")
+                            st.success("Kayıt başarılı! Giriş yapabilirsiniz.")
                         except Exception as e: st.error(f"Hata: {e}")
                     else: st.error("Geçersiz anahtar veya zayıf şifre!")
     st.stop()
 
-# --- 6. SIDEBAR VE MODEL (GÜNCEL: GOOGLE SEARCH EKLENDİ) ---
-if st.session_state.user is not None:
-    user_id = st.session_state.user["uid"]
-    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-    
-    # BURASI KRİTİK: Modele Google Arama yapma yeteneği veriyoruz
-    model = genai.GenerativeModel(
-        model_name="models/gemini-2.5-flash",
-        tools=[{"google_search_retrieval": {}}] # Canlı internet erişimi burada açılıyor
-    )
+# --- 6. SIDEBAR VE MODEL (GOOGLE SEARCH EKLENDİ) ---
+user_id = st.session_state.user["uid"]
+genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 
-    with st.sidebar:
-        st.markdown(f"<div class='centered-text'><h2>💼 Printnest AI</h2><p>{st.session_state.user['email']}</p></div>", unsafe_allow_html=True)
-        # ... (Sidebar içindeki butonlar ve geçmiş yükleme mantığı aynı)
+# CANLI VERİ İÇİN TOOL TANIMLAMASI
+model = genai.GenerativeModel(
+    model_name="models/gemini-2.5-flash",
+    tools=[{"google_search_retrieval": {}}] 
+)
 
-# --- 7. ANA CHAT EKRANI (DEĞİŞMEDİ) ---
+with st.sidebar:
+    st.markdown(f"<div class='centered-text'><h2>💼 Printnest AI</h2><p>{st.session_state.user['email']}</p></div>", unsafe_allow_html=True)
+    if st.button("➕ Yeni Sohbet", use_container_width=True, type="primary"):
+        st.session_state.current_thread_id = str(uuid.uuid4())
+        st.session_state.chat_session = None; st.rerun()
+    st.markdown("---")
+    for t in get_user_threads(user_id):
+        if st.button(f"💬 {t['title']}", key=t['id'], use_container_width=True):
+            st.session_state.current_thread_id = t['id']
+            st.session_state.chat_session = model.start_chat(history=load_messages_from_thread(user_id, t['id']))
+            st.rerun()
+    st.divider()
+    if st.button("🚪 Oturumu Kapat", use_container_width=True):
+        st.session_state.user = None; st.rerun()
+
+# --- 7. ANA CHAT EKRANI ---
 if st.session_state.current_thread_id is None:
     st.session_state.current_thread_id = str(uuid.uuid4())
 if "chat_session" not in st.session_state or st.session_state.chat_session is None:
@@ -148,18 +151,15 @@ if not st.session_state.chat_session.history:
     st.markdown("<br><br><br>", unsafe_allow_html=True)
     st.markdown("<div style='text-align: center;'><h1 style='font-size: 3rem;'>Merhaba Printnest Ekibi! 👋</h1><p style='font-size: 1.5rem; color: #555;'>Bugün iş süreçlerinizde size nasıl yardımcı olabilirim?</p></div>", unsafe_allow_html=True)
 
-# Mevcut sohbeti göster
 for msg in st.session_state.chat_session.history:
     with st.chat_message("assistant" if msg.role == "model" else "user"): st.markdown(msg.parts[0].text)
 
-# Yeni mesaj girişi ve Spinner eklenmiş hali
-if prompt := st.chat_input("Ask Printnest AI..."):
+if prompt := st.chat_input("Mesajınızı buraya yazın..."):
     with st.chat_message("user"): st.markdown(prompt)
     save_message_to_db(user_id, st.session_state.current_thread_id, "user", prompt)
     
     with st.chat_message("assistant"):
-        with st.spinner("İnternet taranıyor ve yanıt hazırlanıyor..."):
-            # Model artık internete bağlanıp en güncel borsa verisini çekebilir
+        with st.spinner("Canlı veriler taranıyor..."):
             res = st.session_state.chat_session.send_message(prompt)
             st.markdown(res.text)
             save_message_to_db(user_id, st.session_state.current_thread_id, "model", res.text)

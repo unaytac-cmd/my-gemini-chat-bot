@@ -32,7 +32,7 @@ except Exception as e:
 
 # --- Gemini Model ve Sohbet Oturumu Başlatma ---
 if "gemini_model" not in st.session_state:
-    st.session_state.gemini_model = genai.GenerativeModel(model_name="gemini-1.5-flash")
+    st.session_state.gemini_model = genai.GenerativeModel(model_name="models/gemini-2.5-flash")
 
 if "chat_session" not in st.session_state:
     # Başlangıçta boş bir geçmişle sohbeti başlatıyoruz

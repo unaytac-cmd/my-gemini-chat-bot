@@ -49,7 +49,7 @@ def save_message_to_db(user_id, thread_id, role, text):
         t_ref.set({"title": title, "updated_at": datetime.now()}, merge=True)
 
 # --- 4. SAYFA AYARLARI VE CSS ---
-st.set_page_config(page_title="Printnest AI", page_icon="💼", layout="wide")
+st.set_page_config(page_title="Printnest AI - Gemini 3", page_icon="💼", layout="wide")
 st.markdown("""
     <style>
     [data-testid="stSidebar"] { background-color: #f8f9fa; padding-top: 1rem; }
@@ -73,41 +73,47 @@ if st.session_state.user is None:
     st.markdown("<div style='padding-top: 8vh;'></div>", unsafe_allow_html=True)
     col1, col2 = st.columns([1.2, 1], gap="large")
     with col1:
-        st.markdown("<h1 style='font-size: 3.5rem; margin-bottom:0;'>💼 Printnest</h1><h3 style='color: #444; margin-top:0;'>Kurumsal Yapay Zeka Portalı</h3>", unsafe_allow_html=True)
-        st.markdown("<div class='feature-card'>🚀 <strong>Hızlı Erişim</strong></div><div class='feature-card'>🛡️ <strong>Güvenli Veri</strong></div><div class='feature-card'>📜 <strong>Sınırsız Bellek</strong></div>", unsafe_allow_html=True)
+        st.markdown("<h1 style='font-size: 3.5rem; margin-bottom:0;'>💼 Printnest</h1><h3 style='color: #444; margin-top:0;'>Gemini 3 Destekli Portalı</h3>", unsafe_allow_html=True)
+        st.markdown("<div class='feature-card'>🌍 <strong>Canlı Veri:</strong> İnternet erişimi ile anlık borsa ve haberler.</div>", unsafe_allow_html=True)
+        st.markdown("<div class='feature-card'>🛡️ <strong>Güvenli Panel:</strong> Firebase şifrelemeli giriş.</div>", unsafe_allow_html=True)
     with col2:
         with st.container(border=True):
-            st.subheader("Güvenli Panel")
+            st.subheader("Kurumsal Erişim")
             tab1, tab2 = st.tabs(["🔑 Giriş Yap", "📝 Kayıt Ol"])
             with tab1:
-                email = st.text_input("Kurumsal E-posta", key="login_email")
+                email = st.text_input("E-posta", key="login_email")
                 password = st.text_input("Şifre", type="password", key="login_pass")
-                if st.button("Sisteme Giriş Yap", use_container_width=True, type="primary"):
+                if st.button("Giriş", use_container_width=True, type="primary"):
                     uid = verify_password(email, password)
                     if uid:
                         st.session_state.user = {"email": email, "uid": uid}
                         st.session_state.current_thread_id = str(uuid.uuid4()); st.rerun()
-                    else: st.error("E-posta veya şifre hatalı!")
+                    else: st.error("Hatalı bilgiler!")
             with tab2:
                 n_email = st.text_input("Yeni E-posta", key="signup_email")
                 n_pass = st.text_input("Yeni Şifre", type="password", key="signup_pass")
-                access_key = st.text_input("Kurumsal Erişim Anahtarı", type="password")
-                if st.button("Hesap Oluştur", use_container_width=True):
-                    if access_key == st.secrets.get("CORPORATE_ACCESS_KEY") and len(n_pass) >= 6:
+                a_key = st.text_input("Erişim Anahtarı", type="password")
+                if st.button("Kayıt Ol", use_container_width=True):
+                    if a_key == st.secrets.get("CORPORATE_ACCESS_KEY") and len(n_pass) >= 6:
                         try:
                             auth.create_user(email=n_email, password=n_pass)
-                            st.success("Kayıt başarılı! Giriş yapabilirsiniz.")
+                            st.success("Başarılı! Giriş yapabilirsiniz.")
                         except Exception as e: st.error(f"Hata: {e}")
-                    else: st.error("Geçersiz anahtar veya zayıf şifre!")
+                    else: st.error("Geçersiz anahtar!")
     st.stop()
 
-# --- 6. SIDEBAR VE MODEL ---
+# --- 6. SIDEBAR VE GEMINI 3 MODELİ ---
 user_id = st.session_state.user["uid"]
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-model = genai.GenerativeModel("models/gemini-2.5-flash")
+
+# Gemini 3 Flash varyantı ve yerleşik Google Search aracı
+model = genai.GenerativeModel(
+    model_name="gemini-3-flash",
+    tools=[{"google_search": {}}]
+)
 
 with st.sidebar:
-    st.markdown(f"<div class='centered-text'><h2>💼 Printnest AI</h2><p>{st.session_state.user['email']}</p></div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='centered-text'><h2>💼 Printnest</h2><p>{st.session_state.user['email']}</p></div>", unsafe_allow_html=True)
     if st.button("➕ Yeni Sohbet", use_container_width=True, type="primary"):
         st.session_state.current_thread_id = str(uuid.uuid4()); st.session_state.chat_session = None; st.rerun()
     st.markdown("---")
@@ -117,7 +123,7 @@ with st.sidebar:
             st.session_state.chat_session = model.start_chat(history=load_messages_from_thread(user_id, t['id']))
             st.rerun()
     st.divider()
-    if st.button("🚪 Oturumu Kapat", use_container_width=True):
+    if st.button("🚪 Çıkış", use_container_width=True):
         st.session_state.user = None; st.rerun()
 
 # --- 7. ANA CHAT EKRANI ---
@@ -127,16 +133,16 @@ if "chat_session" not in st.session_state or st.session_state.chat_session is No
     st.session_state.chat_session = model.start_chat(history=[])
 
 if not st.session_state.chat_session.history:
-    st.markdown("<br><br><br><div style='text-align: center;'><h1 style='font-size: 3rem;'>Merhaba Printnest Ekibi! 👋</h1><p style='font-size: 1.5rem; color: #555;'>Printnest için size nasıl yardımcı olabilirim?</p></div>", unsafe_allow_html=True)
+    st.markdown("<br><br><div style='text-align: center;'><h1>Merhaba! 👋</h1><p>Gemini 3 Flash ile canlı verilere erişebilirim.</p></div>", unsafe_allow_html=True)
 
 for msg in st.session_state.chat_session.history:
     with st.chat_message("assistant" if msg.role == "model" else "user"): st.markdown(msg.parts[0].text)
 
-if prompt := st.chat_input("Mesajınızı yazın..."):
+if prompt := st.chat_input("Bir şey sorun..."):
     with st.chat_message("user"): st.markdown(prompt)
     save_message_to_db(user_id, st.session_state.current_thread_id, "user", prompt)
     with st.chat_message("assistant"):
-        with st.spinner("Yanıt üretiliyor..."):
+        with st.spinner("Gemini 3 analiz ediyor..."):
             res = st.session_state.chat_session.send_message(prompt)
             st.markdown(res.text)
             save_message_to_db(user_id, st.session_state.current_thread_id, "model", res.text)

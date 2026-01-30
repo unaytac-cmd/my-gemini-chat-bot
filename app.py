@@ -23,33 +23,11 @@ st.set_page_config(page_title="Printnest AI", page_icon="💼", layout="wide")
 
 st.markdown("""
     <style>
-    /* Sidebar Genel Stil */
-    [data-testid="stSidebar"] { background-color: #f8f9fa; padding-top: 0rem; }
-    
-    /* Buton Yuvarlama */
+    [data-testid="stSidebar"] { background-color: #f8f9fa; padding-top: 1rem; }
     .stButton>button { border-radius: 8px; }
-    
-    /* Sidebar Alt Buton Sabitleme (Chat Bar ile Hizalama) */
-    .sidebar-footer {
-        position: fixed;
-        bottom: 32px; /* Chat bar yüksekliğiyle hizalanması için optimize edildi */
-        width: 260px;
-        background-color: #f8f9fa;
-        z-index: 999;
-    }
-    
-    /* Üst Başlık ve Email Ortalama */
-    .centered-header {
-        text-align: center;
-        padding-top: 20px;
-        padding-bottom: 10px;
-        border-bottom: 1px solid #e6e9ef;
-        margin-bottom: 20px;
-    }
-    
-    /* Gereksiz Streamlit öğelerini gizle */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
+    .centered-header { text-align: center; margin-bottom: 20px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -110,19 +88,14 @@ genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 model = genai.GenerativeModel("models/gemini-2.5-flash")
 
 with st.sidebar:
-    # Üst Bölüm: Logo ve Email Ortalı
-    st.markdown(f"""
-        <div class='centered-header'>
-            <h2 style='margin:0;'>💼 Printnest AI</h2>
-            <p style='color: #666; margin:0; font-size: 0.85rem;'>{st.session_state.user['email']}</p>
-        </div>
-    """, unsafe_allow_html=True)
+    st.markdown(f"<div class='centered-header'><h2>💼 Printnest AI</h2><p>{st.session_state.user['email']}</p></div>", unsafe_allow_html=True)
     
     if st.button("➕ Yeni Sohbet", use_container_width=True, type="primary"):
         st.session_state.current_thread_id = str(uuid.uuid4())
         st.session_state.chat_session = None; st.rerun()
     
-    st.markdown("<br><b>📜 Sohbet Geçmişi</b>", unsafe_allow_html=True)
+    st.markdown("---")
+    st.markdown("#### 📜 Sohbet Geçmişi")
     user_id = st.session_state.user["uid"]
     for t in get_user_threads(user_id):
         if st.button(f"💬 {t['title']}", key=t['id'], use_container_width=True):
@@ -130,18 +103,15 @@ with st.sidebar:
             st.session_state.chat_session = model.start_chat(history=load_messages_from_thread(user_id, t['id']))
             st.rerun()
 
-    # Alt Bölüm: Çıkış Butonu (Mesaj barı ile hizalı)
-    st.markdown("<div class='sidebar-footer'>", unsafe_allow_html=True)
+    st.divider()
     if st.button("🚪 Oturumu Kapat", use_container_width=True):
         st.session_state.user = None; st.rerun()
-    st.markdown("</div>", unsafe_allow_html=True)
 
 # --- 6. CHAT ALANI ---
 if st.session_state.current_thread_id is None: st.session_state.current_thread_id = str(uuid.uuid4())
 if "chat_session" not in st.session_state or st.session_state.chat_session is None:
     st.session_state.chat_session = model.start_chat(history=[])
 
-# KARŞILAMA YAZISI
 if not st.session_state.chat_session.history:
     st.markdown("<br><br><br>", unsafe_allow_html=True)
     st.markdown("<div style='text-align: center;'><h1 style='font-size: 3rem;'>Merhaba Printnest Ekibi! 👋</h1><p style='font-size: 1.5rem; color: #555;'>Bugün size nasıl yardımcı olabilirim?</p></div>", unsafe_allow_html=True)

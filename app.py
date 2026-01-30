@@ -1,7 +1,10 @@
 import streamlit as st
 import google.generativeai as genai
 import firebase_admin
-from firebase_admin import credentials, auth
+from firebase_admin import credentials, auth, firestore
+import uuid
+from datetime import datetime
+import time
 
 # --- 1. FIREBASE BAĞLANTISI ---
 if not firebase_admin._apps:
@@ -13,67 +16,46 @@ if not firebase_admin._apps:
         st.error(f"Firebase bağlantı hatası: {e}")
         st.stop()
 
-# --- 2. SAYFA AYARLARI ---
-st.set_page_config(page_title="Printnest AI", page_icon="💼")
+db = firestore.client()
 
+# --- 2. SAYFA AYARLARI ---
+st.set_page_config(page_title="Printnest AI", page_icon="💼", layout="wide")
+
+# Session State Başlatma
 if "user" not in st.session_state:
     st.session_state.user = None
+if "current_thread_id" not in st.session_state:
+    st.session_state.current_thread_id = None
 
-# --- 3. GİRİŞ EKRANI ---
+# --- 3. GİRİŞ EKRANI (SAFARI FIX) ---
 if st.session_state.user is None:
-    st.title("💼 Printnest AI Giriş")
+    st.title("💼 Printnest Corporate AI")
     tab1, tab2 = st.tabs(["Giriş Yap", "Kayıt Ol"])
     
     with tab1:
-        email = st.text_input("E-posta")
-        password = st.text_input("Şifre", type="password")
-        if st.button("Giriş Yap"):
-            try:
-                user = auth.get_user_by_email(email)
-                st.session_state.user = email
-                st.rerun()
-            except:
-                st.error("Giriş başarısız.")
-    
+        email = st.text_input("E-posta", key="login_email")
+        password = st.text_input("Şifre", type="password", key="login_pass")
+        
+        if st.button("Giriş", use_container_width=True):
+            if email and password:
+                try:
+                    user = auth.get_user_by_email(email)
+                    st.session_state.user = {"email": email, "uid": user.uid}
+                    # Safari'nin state'i işlemesi için çok kısa bekleme ve rerun
+                    time.sleep(0.2)
+                    st.rerun() 
+                except:
+                    st.error("Giriş bilgileri hatalı veya kullanıcı bulunamadı.")
+            else:
+                st.warning("Lütfen tüm alanları doldurun.")
+                
     with tab2:
-        new_email = st.text_input("Yeni E-posta")
-        new_pass = st.text_input("Yeni Şifre", type="password")
-        if st.button("Kayıt Ol"):
-            try:
-                auth.create_user(email=new_email, password=new_pass)
-                st.success("Kayıt başarılı! Giriş yapabilirsiniz.")
-            except Exception as e:
-                st.error(f"Hata: {e}")
-    st.stop()
-
-# --- 4. GEMINI AYARLARI ---
-genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-model = genai.GenerativeModel("models/gemini-2.5-flash")
-
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-
-# --- 5. SIDEBAR ---
-with st.sidebar:
-    st.write(f"Giriş yapıldı: {st.session_state.user}")
-    if st.button("Çıkış Yap"):
-        st.session_state.user = None
-        st.session_state.messages = []
-        st.rerun()
-
-# --- 6. CHAT ARAYÜZÜ ---
-st.title("🚀 Printnest AI Çalışma Alanı")
-
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
-
-if prompt := st.chat_input("Mesajınızı yazın..."):
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
-        st.markdown(prompt)
-
-    with st.chat_message("assistant"):
-        response = model.generate_content(prompt)
-        st.markdown(response.text)
-        st.session_state.messages.append({"role": "assistant", "content": response.text})
+        new_email = st.text_input("Yeni E-posta", key="signup_email")
+        new_pass = st.text_input("Yeni Şifre", type="password", key="signup_pass")
+        if st.button("Kayıt Ol", use_container_width=True):
+            if len(new_pass) >= 6:
+                try:
+                    auth.create_user(email=new_email, password=new_pass)
+                    st.success("Kayıt başarılı! Şimdi giriş yapabilirsiniz.")
+                except Exception as e:
+                    st.error(f"Hata: {e}")

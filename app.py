@@ -7,7 +7,7 @@ from datetime import datetime
 import time
 import requests
 
-# --- 1. FIREBASE BAĞLANTISI ---
+# --- 1. FIREBASE BAĞLANTISI (DEĞİŞMEDİ) ---
 if not firebase_admin._apps:
     try:
         fb_dict = dict(st.secrets["firebase"])
@@ -19,7 +19,7 @@ if not firebase_admin._apps:
 
 db = firestore.client()
 
-# --- 2. ŞİFRE DOĞRULAMA (API) ---
+# --- 2. ŞİFRE DOĞRULAMA (DEĞİŞMEDİ) ---
 def verify_password(email, password):
     try:
         api_key = st.secrets["FIREBASE_WEB_API_KEY"]
@@ -32,7 +32,7 @@ def verify_password(email, password):
     except:
         return None
 
-# --- 3. YARDIMCI FONKSİYONLAR ---
+# --- 3. YARDIMCI FONKSİYONLAR (DEĞİŞMEDİ) ---
 def get_user_threads(user_id):
     try:
         threads = db.collection("users").document(user_id).collection("threads").order_by("updated_at", direction=firestore.Query.DESCENDING).limit(15).stream()
@@ -52,7 +52,7 @@ def save_message_to_db(user_id, thread_id, role, text):
         title = text[:30] + "..." if len(text) > 30 else text
         t_ref.set({"title": title, "updated_at": datetime.now()}, merge=True)
 
-# --- 4. SAYFA AYARLARI VE CSS ---
+# --- 4. SAYFA AYARLARI VE CSS (ŞEFFAFLIK FİX EKLENDİ) ---
 st.set_page_config(page_title="Printnest AI", page_icon="💼", layout="wide")
 
 st.markdown("""
@@ -61,7 +61,14 @@ st.markdown("""
     .stButton>button { border-radius: 8px; }
     #MainMenu {visibility: hidden;} footer {visibility: hidden;}
     
-    /* Giriş Sayfası Hizalama */
+    /* ŞEFFAFLIK FİX: Sayfa yenilenirken eski içeriğin şeffaf görünmesini engeller */
+    [data-testid="stAppViewBlockContainer"] {
+        opacity: 1 !important;
+    }
+    .stApp [data-testid="stVerticalBlock"] > div {
+        transition: none !important; /* Blur efektini kapatır */
+    }
+
     [data-testid="stHorizontalBlock"] { align-items: center; }
     .feature-card {
         background-color: #f8f9fa; padding: 20px; border-radius: 12px;
@@ -76,11 +83,10 @@ st.markdown("""
 if "user" not in st.session_state: st.session_state.user = None
 if "current_thread_id" not in st.session_state: st.session_state.current_thread_id = None
 
-# --- 5. GİRİŞ & KAYIT EKRANI ---
+# --- 5. GİRİŞ & KAYIT EKRANI (DEĞİŞMEDİ) ---
 if st.session_state.user is None:
     st.markdown("<div style='padding-top: 8vh;'></div>", unsafe_allow_html=True)
     col1, col2 = st.columns([1.2, 1], gap="large")
-    
     with col1:
         st.markdown("<h1 style='font-size: 3.5rem; margin-bottom:0;'>💼 Printnest</h1>", unsafe_allow_html=True)
         st.markdown("<h3 style='color: #444; margin-top:0;'>Kurumsal Yapay Zeka Portalı</h3>", unsafe_allow_html=True)
@@ -89,12 +95,10 @@ if st.session_state.user is None:
         <div class="feature-card">🛡️ <strong>Güvenli Veri</strong></div>
         <div class="feature-card">📜 <strong>Sınırsız Bellek</strong></div>
         """, unsafe_allow_html=True)
-
     with col2:
         with st.container(border=True):
             st.subheader("Güvenli Panel")
             tab1, tab2 = st.tabs(["🔑 Giriş Yap", "📝 Kayıt Ol"])
-            
             with tab1:
                 email = st.text_input("Kurumsal E-posta", key="login_email")
                 password = st.text_input("Şifre", type="password", key="login_pass")
@@ -105,26 +109,21 @@ if st.session_state.user is None:
                         st.session_state.current_thread_id = str(uuid.uuid4())
                         st.rerun()
                     else: st.error("E-posta veya şifre hatalı!")
-            
             with tab2:
                 n_email = st.text_input("Yeni E-posta", key="signup_email")
                 n_pass = st.text_input("Yeni Şifre", type="password", key="signup_pass")
                 access_key = st.text_input("Kurumsal Erişim Anahtarı", type="password")
                 if st.button("Hesap Oluştur", use_container_width=True):
                     m_key = st.secrets.get("CORPORATE_ACCESS_KEY")
-                    if access_key != m_key:
-                        st.error("Geçersiz Erişim Anahtarı!")
-                    elif len(n_pass) < 6:
-                        st.warning("Şifre en az 6 karakter olmalıdır.")
-                    else:
+                    if access_key == m_key and len(n_pass) >= 6:
                         try:
                             auth.create_user(email=n_email, password=n_pass)
                             st.success("Kayıt başarılı! Şimdi giriş yapabilirsiniz.")
-                        except Exception as e:
-                            st.error(f"Hata: {e}")
+                        except Exception as e: st.error(f"Hata: {e}")
+                    else: st.error("Geçersiz anahtar veya zayıf şifre!")
     st.stop()
 
-# --- 6. SIDEBAR VE MODEL ---
+# --- 6. SIDEBAR VE MODEL (DEĞİŞMEDİ) ---
 user_id = st.session_state.user["uid"]
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 model = genai.GenerativeModel("models/gemini-2.5-flash")
@@ -144,7 +143,7 @@ with st.sidebar:
     if st.button("🚪 Oturumu Kapat", use_container_width=True):
         st.session_state.user = None; st.rerun()
 
-# --- 7. ANA CHAT EKRANI ---
+# --- 7. ANA CHAT EKRANI (DEĞİŞMEDİ) ---
 if st.session_state.current_thread_id is None:
     st.session_state.current_thread_id = str(uuid.uuid4())
 if "chat_session" not in st.session_state or st.session_state.chat_session is None:
@@ -154,12 +153,17 @@ if not st.session_state.chat_session.history:
     st.markdown("<br><br><br>", unsafe_allow_html=True)
     st.markdown("<div style='text-align: center;'><h1 style='font-size: 3rem;'>Merhaba Printnest Ekibi! 👋</h1><p style='font-size: 1.5rem; color: #555;'>Bugün iş süreçlerinizde size nasıl yardımcı olabilirim?</p></div>", unsafe_allow_html=True)
 
+# Mevcut sohbeti göster
 for msg in st.session_state.chat_session.history:
     with st.chat_message("assistant" if msg.role == "model" else "user"): st.markdown(msg.parts[0].text)
 
+# Yeni mesaj girişi ve Spinner eklenmiş hali
 if prompt := st.chat_input("Mesajınızı buraya yazın..."):
     with st.chat_message("user"): st.markdown(prompt)
     save_message_to_db(user_id, st.session_state.current_thread_id, "user", prompt)
-    res = st.session_state.chat_session.send_message(prompt)
-    with st.chat_message("assistant"): st.markdown(res.text)
-    save_message_to_db(user_id, st.session_state.current_thread_id, "model", res.text)
+    
+    with st.chat_message("assistant"):
+        with st.spinner("Printnest AI düşünüyor..."): # Şeffaflık yerine net bir yükleme durumu
+            res = st.session_state.chat_session.send_message(prompt)
+            st.markdown(res.text)
+            save_message_to_db(user_id, st.session_state.current_thread_id, "model", res.text)

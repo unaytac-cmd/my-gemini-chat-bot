@@ -105,12 +105,13 @@ if st.session_state.user is None:
                             auth.create_user(email=n_email, password=n_pass)
                             st.success("Kayıt başarılı! Giriş yapabilirsiniz.")
                         except Exception as e: st.error(f"Hata: {e}")
-                    else: st.error("Geçersiz anahtar veya zayıf şifre!")
+                    else: st.error("Geçersiz anahtar!")
     st.stop()
 
 # --- 6. SIDEBAR VE MODEL ---
 user_id = st.session_state.user["uid"]
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+# Gemini 2.5 Flash modelini en temiz haliyle tanımlıyoruz
 model = genai.GenerativeModel("models/gemini-2.5-flash")
 
 with st.sidebar:
@@ -135,9 +136,6 @@ if st.session_state.current_thread_id is None:
 if "chat_session" not in st.session_state or st.session_state.chat_session is None:
     st.session_state.chat_session = model.start_chat(history=[])
 
-if not st.session_state.chat_session.history:
-    st.markdown("<br><br><br><div style='text-align: center;'><h1 style='font-size: 3rem;'>Merhaba Printnest Ekibi! 👋</h1><p style='font-size: 1.5rem; color: #555;'>Bugün size nasıl yardımcı olabilirim?</p></div>", unsafe_allow_html=True)
-
 for msg in st.session_state.chat_session.history:
     with st.chat_message("assistant" if msg.role == "model" else "user"):
         st.markdown(msg.parts[0].text)
@@ -147,7 +145,10 @@ if prompt := st.chat_input("Mesajınızı buraya yazın..."):
     save_message_to_db(user_id, st.session_state.current_thread_id, "user", prompt)
     
     with st.chat_message("assistant"):
-        with st.spinner("Düşünüyor..."):
-            res = st.session_state.chat_session.send_message(prompt)
-            st.markdown(res.text)
-            save_message_to_db(user_id, st.session_state.current_thread_id, "model", res.text)
+        with st.spinner("İşleniyor..."):
+            try:
+                res = st.session_state.chat_session.send_message(prompt)
+                st.markdown(res.text)
+                save_message_to_db(user_id, st.session_state.current_thread_id, "model", res.text)
+            except Exception as e:
+                st.error(f"Sohbet hatası: {e}")

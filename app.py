@@ -4,8 +4,8 @@ import firebase_admin
 from firebase_admin import credentials, auth, firestore
 import uuid
 from datetime import datetime
-import time
 import requests
+from googlesearch import search  # İnternet araması için
 
 # --- 1. FIREBASE BAĞLANTISI ---
 if not firebase_admin._apps:
@@ -19,16 +19,14 @@ if not firebase_admin._apps:
 
 db = firestore.client()
 
-# --- 2. ŞİFRE DOĞRULAMA (API) ---
+# --- 2. ŞİFRE DOĞRULAMA ---
 def verify_password(email, password):
     try:
         api_key = st.secrets["FIREBASE_WEB_API_KEY"]
         url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={api_key}"
         payload = {"email": email, "password": password, "returnSecureToken": True}
         res = requests.post(url, json=payload)
-        if res.status_code == 200:
-            return res.json()["localId"]
-        return None
+        return res.json()["localId"] if res.status_code == 200 else None
     except: return None
 
 # --- 3. YARDIMCI FONKSİYONLAR ---
@@ -51,6 +49,16 @@ def save_message_to_db(user_id, thread_id, role, text):
         title = text[:30] + "..." if len(text) > 30 else text
         t_ref.set({"title": title, "updated_at": datetime.now()}, merge=True)
 
+# --- GÜNCEL BİLGİ ARAMA (YENİ) ---
+def get_live_context(query):
+    """Google'da arama yapar ve Gemini'ye referans sağlar."""
+    try:
+        results = []
+        for url in search(query, num_results=3):
+            results.append(url)
+        return "\nReferans Kaynaklar:\n" + "\n".join(results)
+    except: return ""
+
 # --- 4. SAYFA AYARLARI VE CSS ---
 st.set_page_config(page_title="Printnest AI", page_icon="💼", layout="wide")
 st.markdown("""
@@ -64,8 +72,7 @@ st.markdown("""
     .feature-card {
         background-color: #f8f9fa; padding: 20px; border-radius: 12px;
         border-left: 5px solid #0e1117; margin-bottom: 15px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-        font-size: 1.1rem;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05); font-size: 1.1rem;
     }
     .centered-text { text-align: center; width: 100%; }
     </style>
@@ -93,7 +100,7 @@ if st.session_state.user is None:
                     if uid:
                         st.session_state.user = {"email": email, "uid": uid}
                         st.session_state.current_thread_id = str(uuid.uuid4()); st.rerun()
-                    else: st.error("Hatalı e-posta veya şifre!")
+                    else: st.error("E-posta veya şifre hatalı!")
             with tab2:
                 n_email = st.text_input("Yeni E-posta", key="signup_email")
                 n_pass = st.text_input("Yeni Şifre", type="password", key="signup_pass")
@@ -107,12 +114,10 @@ if st.session_state.user is None:
                     else: st.error("Geçersiz anahtar veya zayıf şifre!")
     st.stop()
 
-# --- 6. SIDEBAR VE MODEL (GOOGLE SEARCH ÇIKARILDI) ---
+# --- 6. SIDEBAR VE MODEL ---
 user_id = st.session_state.user["uid"]
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-
-# Model sadeleştirildi, Google Search kaldırıldı
-model = genai.GenerativeModel(model_name="models/gemini-2.5-flash")
+model = genai.GenerativeModel("models/gemini-2.5-flash")
 
 with st.sidebar:
     st.markdown(f"<div class='centered-text'><h2>💼 Printnest AI</h2><p>{st.session_state.user['email']}</p></div>", unsafe_allow_html=True)
@@ -140,12 +145,19 @@ if not st.session_state.chat_session.history:
 for msg in st.session_state.chat_session.history:
     with st.chat_message("assistant" if msg.role == "model" else "user"): st.markdown(msg.parts[0].text)
 
-if prompt := st.chat_input("Ask Printnest AI..."):
+if prompt := st.chat_input("Mesajınızı buraya yazın..."):
     with st.chat_message("user"): st.markdown(prompt)
     save_message_to_db(user_id, st.session_state.current_thread_id, "user", prompt)
     
     with st.chat_message("assistant"):
         with st.spinner("Yanıt hazırlanıyor..."):
-            res = st.session_state.chat_session.send_message(prompt)
+            # Güncel bilgi gerektiren kelimeleri kontrol et
+            keywords = ["fiyat", "borsa", "güncel", "kaç para", "hisse", "haber", "bugün"]
+            enhanced_prompt = prompt
+            if any(word in prompt.lower() for word in keywords):
+                live_info = get_live_context(prompt)
+                enhanced_prompt = f"{prompt}\n\n[Sistem Bilgisi: Bu konuda en güncel verilere ulaşmak için şu kaynakları inceleyebilirsin: {live_info}]"
+
+            res = st.session_state.chat_session.send_message(enhanced_prompt)
             st.markdown(res.text)
             save_message_to_db(user_id, st.session_state.current_thread_id, "model", res.text)

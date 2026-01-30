@@ -27,25 +27,19 @@ except Exception as e:
     st.error(f"Config Error: {e}")
     st.stop()
 
-# --- 3. MODEL VE CANLI ARAMA AYARI (YENİ STANDART) ---
+# --- 3. MODEL VE CANLI ARAMA AYARI (HATASIZ YAPI) ---
 if "gemini_model" not in st.session_state:
     try:
-        # Hata mesajındaki talimata göre sadece 'google_search' ismini kullanıyoruz.
-        # En yeni SDK'larda bu yapı bir 'Tool' objesi olarak tanımlanır.
+        # En yeni SDK sürümünde en güvenli araç tanımlama yöntemi budur.
+        # Manuel sözlük yerine doğrudan araç ismini liste içinde gönderiyoruz.
+        # Bu yöntem 'Unknown field for FunctionDeclaration' hatasını engeller.
         st.session_state.gemini_model = genai.GenerativeModel(
             model_name="models/gemini-2.5-flash",
-            tools=[{"google_search": {}}] # Sözlük yapısı ama isim 'google_search'
+            tools=['google_search'] 
         )
     except Exception as e:
-        # Eğer yukarıdaki hata verirse, fallback olarak en sade listeyi dener:
-        try:
-            st.session_state.gemini_model = genai.GenerativeModel(
-                model_name="models/gemini-2.5-flash",
-                tools=['google_search']
-            )
-        except:
-            st.error(f"Model Initialization Error: {e}")
-            st.stop()
+        st.error(f"Model Initialization Error: {e}")
+        st.stop()
 
 if "chat_session" not in st.session_state:
     st.session_state.chat_session = st.session_state.gemini_model.start_chat(history=[])
@@ -57,7 +51,7 @@ with st.sidebar:
         st.session_state.chat_session = st.session_state.gemini_model.start_chat(history=[])
         st.rerun()
     st.divider()
-    st.caption("Office Workspace")
+    st.caption("Workspace Status: Online")
 
 # --- 5. ANA EKRAN ---
 st.title("🚀 Printnest Corporate AI")
@@ -69,7 +63,7 @@ for message in st.session_state.chat_session.history:
         st.markdown(message.parts[0].text)
 
 # --- 7. MESAJ GİRİŞİ VE YANIT ---
-if prompt := st.chat_input("Ask me anything about today's market..."):
+if prompt := st.chat_input("How can I help you today?"):
     with st.chat_message("user"):
         st.markdown(prompt)
 
@@ -78,8 +72,7 @@ if prompt := st.chat_input("Ask me anything about today's market..."):
         full_response = ""
         
         try:
-            # Yanıt alırken model artık otomatik olarak Google Search kullanacak
-            response = st.session_state.chat_session.send_message(prompt, stream=True)
+            response = st.session_state.chat_message.send_message(prompt, stream=True)
             
             for chunk in response:
                 if hasattr(chunk, 'text'):

@@ -28,6 +28,13 @@ st.markdown("""
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     .centered-header { text-align: center; margin-bottom: 20px; }
+    .feature-card {
+        background-color: #f1f3f5;
+        padding: 15px;
+        border-radius: 10px;
+        border-left: 5px solid #0e1117;
+        margin-bottom: 10px;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -39,33 +46,64 @@ if "current_thread_id" not in st.session_state:
 # --- 3. GİRİŞ & KAYIT EKRANI ---
 if st.session_state.user is None:
     col1, col2 = st.columns([1, 1], gap="large")
+    
     with col1:
-        st.markdown("<br><br># 💼 Printnest.com\n### Kurumsal Yapay Zeka Portalı", unsafe_allow_html=True)
+        st.markdown("<br><br>", unsafe_allow_html=True)
+        st.markdown("# 💼 Printnest.com")
+        st.markdown("### Kurumsal Yapay Zeka Portalı")
+        st.write("Printnest ailesine özel geliştirilmiş, iş süreçlerini hızlandıran ve verimliliği artıran akıllı asistan platformu.")
+        
+        st.markdown("""
+        <div class="feature-card">
+            <strong>🚀 Hızlı Erişim</strong><br>
+            Giriş yaptığınız anda Gemini 2.5 Flash teknolojisi ile sohbete başlayın.
+        </div>
+        <div class="feature-card">
+            <strong>🛡️ Güvenli Altyapı</strong><br>
+            Tüm verileriniz Firebase güvencesiyle sadece size özel saklanır.
+        </div>
+        <div class="feature-card">
+            <strong>📜 Akıllı Bellek</strong><br>
+            Geçmiş görüşmelerinize yan menüden dilediğiniz zaman ulaşın.
+        </div>
+        """, unsafe_allow_html=True)
+
     with col2:
         st.markdown("<br><br>", unsafe_allow_html=True)
+        st.subheader("Güvenli Erişim")
         tab1, tab2 = st.tabs(["🔑 Giriş Yap", "📝 Personel Kaydı"])
+        
         with tab1:
             email = st.text_input("Kurumsal E-posta", key="login_email")
             password = st.text_input("Şifre", type="password", key="login_pass")
-            if st.button("Giriş Yap", use_container_width=True, type="primary"):
-                try:
-                    user = auth.get_user_by_email(email)
-                    st.session_state.user = {"email": email, "uid": user.uid}
-                    st.session_state.current_thread_id = str(uuid.uuid4())
-                    time.sleep(0.3); st.rerun()
-                except: st.error("Hatalı giriş.")
+            if st.button("Sisteme Giriş Yap", use_container_width=True, type="primary"):
+                if email and password:
+                    try:
+                        user = auth.get_user_by_email(email)
+                        st.session_state.user = {"email": email, "uid": user.uid}
+                        st.session_state.current_thread_id = str(uuid.uuid4())
+                        time.sleep(0.3); st.rerun()
+                    except:
+                        st.error("❌ E-posta veya şifre hatalı!")
+                else:
+                    st.warning("Lütfen alanları doldurun.")
+                    
         with tab2:
             n_email = st.text_input("Yeni E-posta", key="signup_email")
             n_pass = st.text_input("Yeni Şifre", type="password", key="signup_pass")
             access_key = st.text_input("Kurumsal Erişim Anahtarı", type="password")
-            if st.button("Hesap Oluştur", use_container_width=True):
+            if st.button("Hesabı Oluştur", use_container_width=True):
                 m_key = st.secrets.get("CORPORATE_ACCESS_KEY")
-                if access_key != m_key: st.error("Geçersiz Anahtar!")
-                else:
-                    try: 
+                if access_key != m_key:
+                    st.error("❌ Geçersiz Erişim Anahtarı!")
+                elif len(n_pass) < 6:
+                    st.warning("⚠️ Şifre en az 6 karakter olmalıdır.")
+                elif n_email and n_pass:
+                    try:
                         auth.create_user(email=n_email, password=n_pass)
-                        st.success("Kayıt başarılı!")
-                    except Exception as e: st.error(f"Hata: {e}")
+                        st.success("✅ Kayıt başarılı! Giriş yapabilirsiniz.")
+                    except Exception as e:
+                        st.error(f"Hata: {e}")
     st.stop()
 
 # --- 4. YARDIMCI FONKSİYONLAR ---
@@ -90,7 +128,7 @@ model = genai.GenerativeModel("models/gemini-2.5-flash")
 with st.sidebar:
     st.markdown(f"<div class='centered-header'><h2>💼 Printnest AI</h2><p>{st.session_state.user['email']}</p></div>", unsafe_allow_html=True)
     
-    if st.button("➕ Yeni Sohbet", use_container_width=True, type="primary"):
+    if st.button("➕ Yeni Sohbet Başlat", use_container_width=True, type="primary"):
         st.session_state.current_thread_id = str(uuid.uuid4())
         st.session_state.chat_session = None; st.rerun()
     

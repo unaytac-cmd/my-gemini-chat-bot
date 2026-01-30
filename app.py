@@ -26,7 +26,7 @@ if "user" not in st.session_state:
 if "current_thread_id" not in st.session_state:
     st.session_state.current_thread_id = None
 
-# --- 3. GİRİŞ VE KAYIT EKRANI (GERİ ALINAN VERSİYON) ---
+# --- 3. GİRİŞ VE KAYIT EKRANI ---
 if st.session_state.user is None:
     col1, col2 = st.columns([1, 1], gap="large")
 
@@ -35,12 +35,12 @@ if st.session_state.user is None:
             # 💼 Printnest.com
             ### Kurumsal Yapay Zeka Portalı
             
-            İş süreçlerinizi optimize eden Gemini tabanlı akıllı asistan.
+            Giriş yaptığınız anda akıllı asistanınız yardıma hazır olacaktır.
             
-            **Erişim Kuralları:**
-            * 🔑 **Personel Kaydı:** Sadece kurumsal erişim anahtarı ile mümkündür.
-            * 🛡️ **Güvenlik:** Tüm veriler şifrelenmiş altyapıda saklanır.
-            * 📜 **Bellek:** Geçmiş konuşmalarınız otomatik yedeklenir.
+            **Sistem Özellikleri:**
+            * 🚀 **Anında Erişim:** Giriş sonrası otomatik sohbet başlatma.
+            * 🛡️ **Güvenli Kayıt:** Kurumsal erişim anahtarı ile koruma.
+            * 📜 **Bellek:** Geçmiş sohbetlerinize yan menüden ulaşın.
         """)
 
     with col2:
@@ -56,6 +56,8 @@ if st.session_state.user is None:
                     try:
                         user = auth.get_user_by_email(email)
                         st.session_state.user = {"email": email, "uid": user.uid}
+                        # OTOMATİK BAŞLATMA: Giriş anında yeni bir ID ata
+                        st.session_state.current_thread_id = str(uuid.uuid4())
                         time.sleep(0.3)
                         st.rerun() 
                     except:
@@ -84,7 +86,7 @@ if st.session_state.user is None:
 
 # --- 4. YARDIMCI FONKSİYONLAR ---
 def get_user_threads(user_id):
-    threads = db.collection("users").document(user_id).collection("threads").order_by("updated_at", direction=firestore.Query.DESCENDING).stream()
+    threads = db.collection("users").document(user_id).collection("threads").order_by("updated_at", direction=firestore.Query.DESCENDING).limit(15).stream()
     return [{"id": t.id, "title": t.to_dict().get("title", "Yeni Sohbet")} for t in threads]
 
 def save_message_to_db(user_id, thread_id, role, text):
@@ -114,10 +116,11 @@ with st.sidebar:
     
     if st.button("➕ Yeni Sohbet Başlat", use_container_width=True):
         st.session_state.current_thread_id = str(uuid.uuid4())
-        st.session_state.chat_session = model.start_chat(history=[])
+        st.session_state.chat_session = None # Oturum tazelensin
         st.rerun()
 
     st.divider()
+    st.subheader("📜 Geçmiş")
     user_id = st.session_state.user["uid"]
     for t in get_user_threads(user_id):
         if st.button(f"💬 {t['title']}", key=t['id'], use_container_width=True):
@@ -129,25 +132,30 @@ with st.sidebar:
     st.divider()
     if st.button("🚪 Çıkış Yap", use_container_width=True):
         st.session_state.user = None
+        st.session_state.current_thread_id = None
         st.rerun()
 
 # --- 7. CHAT EKRANI ---
-if st.session_state.current_thread_id:
-    if "chat_session" not in st.session_state or st.session_state.chat_session is None:
-        st.session_state.chat_session = model.start_chat(history=[])
+# Eğer bir şekilde thread_id yoksa (örneğin session düştüyse), otomatik oluştur
+if st.session_state.current_thread_id is None:
+    st.session_state.current_thread_id = str(uuid.uuid4())
 
-    for msg in st.session_state.chat_session.history:
-        with st.chat_message("assistant" if msg.role == "model" else "user"):
-            st.markdown(msg.parts[0].text)
+# Sohbet oturumu yoksa başlat
+if "chat_session" not in st.session_state or st.session_state.chat_session is None:
+    st.session_state.chat_session = model.start_chat(history=[])
 
-    if prompt := st.chat_input("Mesajınızı yazın..."):
-        with st.chat_message("user"):
-            st.markdown(prompt)
-        save_message_to_db(user_id, st.session_state.current_thread_id, "user", prompt)
-        
-        response = st.session_state.chat_session.send_message(prompt)
-        with st.chat_message("assistant"):
-            st.markdown(response.text)
-        save_message_to_db(user_id, st.session_state.current_thread_id, "model", response.text)
-else:
-    st.info("Sohbete başlamak için sol menüden 'Yeni Sohbet' başlatın.")
+# Sohbet geçmişini ekrana bas
+for msg in st.session_state.chat_session.history:
+    with st.chat_message("assistant" if msg.role == "model" else "user"):
+        st.markdown(msg.parts[0].text)
+
+# Yeni mesaj girişi
+if prompt := st.chat_input("Nasıl yardımcı olabilirim?"):
+    with st.chat_message("user"):
+        st.markdown(prompt)
+    save_message_to_db(user_id, st.session_state.current_thread_id, "user", prompt)
+    
+    response = st.session_state.chat_session.send_message(prompt)
+    with st.chat_message("assistant"):
+        st.markdown(response.text)
+    save_message_to_db(user_id, st.session_state.current_thread_id, "model", response.text)

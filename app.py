@@ -48,19 +48,9 @@ def save_message_to_db(user_id, thread_id, role, text):
         title = text[:30] + "..." if len(text) > 30 else text
         t_ref.set({"title": title, "updated_at": datetime.now()}, merge=True)
 
-# --- 4. TASARIM VE CSS ---
+# --- 4. TASARIM ---
 st.set_page_config(page_title="Printnest AI", page_icon="💼", layout="wide")
-st.markdown("""
-    <style>
-    [data-testid="stSidebar"] { background-color: #f8f9fa; }
-    .stButton>button { border-radius: 8px; }
-    #MainMenu {visibility: hidden;} footer {visibility: hidden;}
-    .feature-card {
-        background-color: #f8f9fa; padding: 20px; border-radius: 12px;
-        border-left: 5px solid #0e1117; margin-bottom: 15px;
-    }
-    </style>
-    """, unsafe_allow_html=True)
+st.markdown("<style>[data-testid='stAppViewBlockContainer'] { opacity: 1 !important; }</style>", unsafe_allow_html=True)
 
 if "user" not in st.session_state: st.session_state.user = None
 if "current_thread_id" not in st.session_state: st.session_state.current_thread_id = None
@@ -69,33 +59,28 @@ if "current_thread_id" not in st.session_state: st.session_state.current_thread_
 if st.session_state.user is None:
     col1, col2 = st.columns([1.2, 1], gap="large")
     with col1:
-        st.markdown("<h1 style='font-size: 3.5rem;'>💼 Printnest</h1>", unsafe_allow_html=True)
-        st.markdown("<div class='feature-card'>🚀 <strong>Gemini 2.0 Flash</strong> altyapısı ile en hızlı yanıtlar.</div>", unsafe_allow_html=True)
+        st.markdown("<h1 style='font-size: 3.5rem;'>💼 Printnest</h1><p>Kurumsal Yapay Zeka</p>", unsafe_allow_html=True)
     with col2:
         with st.container(border=True):
-            st.subheader("Kurumsal Panel")
-            tab1, tab2 = st.tabs(["🔑 Giriş", "📝 Kayıt"])
+            st.subheader("Giriş Paneli")
+            tab1, tab2 = st.tabs(["Giriş", "Kayıt"])
             with tab1:
                 e = st.text_input("E-posta", key="l_e")
                 p = st.text_input("Şifre", type="password", key="l_p")
-                if st.button("Giriş Yap", use_container_width=True, type="primary"):
+                if st.button("Sisteme Gir", use_container_width=True, type="primary"):
                     uid = verify_password(e, p)
                     if uid:
                         st.session_state.user = {"email": e, "uid": uid}
                         st.session_state.current_thread_id = str(uuid.uuid4()); st.rerun()
-                    else: st.error("Hata!")
+                    else: st.error("Hatalı!")
             with tab2:
-                ne = st.text_input("Yeni E-posta")
-                np = st.text_input("Yeni Şifre", type="password")
-                ak = st.text_input("Erişim Anahtarı", type="password")
-                if st.button("Kayıt Ol", use_container_width=True):
-                    if ak == st.secrets.get("CORPORATE_ACCESS_KEY"):
-                        auth.create_user(email=ne, password=np); st.success("Başarılı!")
+                st.info("Kayıt için kurumsal anahtar gereklidir.")
     st.stop()
 
-# --- 6. MODEL (ARAÇSIZ - EN STABİL HALİ) ---
+# --- 6. MODEL (EN STABİL MODELİ SEÇTİK) ---
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-model = genai.GenerativeModel("models/gemini-2.0-flash") # En stabil model
+# 'gemini-1.5-flash' tüm API Key'ler için en uyumlu ve "bulunabilir" modeldir.
+model = genai.GenerativeModel("gemini-1.5-flash")
 
 with st.sidebar:
     st.title("💼 Printnest AI")
@@ -113,12 +98,18 @@ if "chat_session" not in st.session_state or st.session_state.chat_session is No
     st.session_state.chat_session = model.start_chat(history=[])
 
 for msg in st.session_state.chat_session.history:
-    with st.chat_message("assistant" if msg.role == "model" else "user"): st.markdown(msg.parts[0].text)
+    with st.chat_message("assistant" if msg.role == "model" else "user"): 
+        st.markdown(msg.parts[0].text)
 
-if prompt := st.chat_input("Bir mesaj yazın..."):
+if prompt := st.chat_input("Mesajınızı yazın..."):
     st.chat_message("user").markdown(prompt)
     save_message_to_db(st.session_state.user["uid"], st.session_state.current_thread_id, "user", prompt)
+    
     with st.chat_message("assistant"):
-        res = st.session_state.chat_session.send_message(prompt)
-        st.markdown(res.text)
-        save_message_to_db(st.session_state.user["uid"], st.session_state.current_thread_id, "model", res.text)
+        try:
+            # Model yanıt üretirken NotFound hatasını önlemek için doğrudan send_message kullanıyoruz
+            res = st.session_state.chat_session.send_message(prompt)
+            st.markdown(res.text)
+            save_message_to_db(st.session_state.user["uid"], st.session_state.current_thread_id, "model", res.text)
+        except Exception as e:
+            st.error(f"Bir hata oluştu: {str(e)}")

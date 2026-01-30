@@ -23,25 +23,33 @@ st.set_page_config(page_title="Printnest AI", page_icon="💼", layout="wide")
 
 st.markdown("""
     <style>
+    /* Sidebar Genel Stil */
     [data-testid="stSidebar"] { background-color: #f8f9fa; padding-top: 0rem; }
-    .stButton>button { border-radius: 8px; }
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
     
-    /* Sidebar alt buton sabitleme */
+    /* Buton Yuvarlama */
+    .stButton>button { border-radius: 8px; }
+    
+    /* Sidebar Alt Buton Sabitleme (Chat Bar ile Hizalama) */
     .sidebar-footer {
         position: fixed;
-        bottom: 25px;
+        bottom: 32px; /* Chat bar yüksekliğiyle hizalanması için optimize edildi */
         width: 260px;
         background-color: #f8f9fa;
-        padding-top: 10px;
+        z-index: 999;
     }
     
-    /* Email ve Başlık Ortalama */
-    .centered-text {
+    /* Üst Başlık ve Email Ortalama */
+    .centered-header {
         text-align: center;
-        width: 100%;
+        padding-top: 20px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #e6e9ef;
+        margin-bottom: 20px;
     }
+    
+    /* Gereksiz Streamlit öğelerini gizle */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
     </style>
     """, unsafe_allow_html=True)
 
@@ -84,8 +92,7 @@ if st.session_state.user is None:
 
 # --- 4. YARDIMCI FONKSİYONLAR ---
 def get_user_threads(user_id):
-    threads = db.collection("users").document(user_id).collection("threads").order_by("updated_at", direction=firestore.Query.DESCENDING).limit(15).stream()
-    return [{"id": t.id, "title": t.to_dict().get("title", "Yeni Sohbet")} for t in threads]
+    return [{"id": t.id, "title": t.to_dict().get("title", "Yeni Sohbet")} for t in db.collection("users").document(user_id).collection("threads").order_by("updated_at", direction=firestore.Query.DESCENDING).limit(15).stream()]
 
 def save_message_to_db(user_id, thread_id, role, text):
     t_ref = db.collection("users").document(user_id).collection("threads").document(thread_id)
@@ -103,21 +110,19 @@ genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 model = genai.GenerativeModel("models/gemini-2.5-flash")
 
 with st.sidebar:
-    # Başlık ve Email Ortalı
+    # Üst Bölüm: Logo ve Email Ortalı
     st.markdown(f"""
-        <div class='centered-text'>
-            <h2 style='margin-bottom:0;'>💼 Printnest AI</h2>
-            <p style='color: #555; font-size: 0.9rem;'>{st.session_state.user['email']}</p>
+        <div class='centered-header'>
+            <h2 style='margin:0;'>💼 Printnest AI</h2>
+            <p style='color: #666; margin:0; font-size: 0.85rem;'>{st.session_state.user['email']}</p>
         </div>
     """, unsafe_allow_html=True)
     
     if st.button("➕ Yeni Sohbet", use_container_width=True, type="primary"):
         st.session_state.current_thread_id = str(uuid.uuid4())
-        st.session_state.chat_session = None
-        st.rerun()
+        st.session_state.chat_session = None; st.rerun()
     
-    st.markdown("---")
-    st.markdown("#### 📜 Sohbet Geçmişi")
+    st.markdown("<br><b>📜 Sohbet Geçmişi</b>", unsafe_allow_html=True)
     user_id = st.session_state.user["uid"]
     for t in get_user_threads(user_id):
         if st.button(f"💬 {t['title']}", key=t['id'], use_container_width=True):
@@ -125,44 +130,28 @@ with st.sidebar:
             st.session_state.chat_session = model.start_chat(history=load_messages_from_thread(user_id, t['id']))
             st.rerun()
 
-    # Oturumu Kapat Butonu (En altta, chat bar ile hizalı)
+    # Alt Bölüm: Çıkış Butonu (Mesaj barı ile hizalı)
     st.markdown("<div class='sidebar-footer'>", unsafe_allow_html=True)
-    st.divider()
     if st.button("🚪 Oturumu Kapat", use_container_width=True):
-        st.session_state.user = None
-        st.rerun()
+        st.session_state.user = None; st.rerun()
     st.markdown("</div>", unsafe_allow_html=True)
 
 # --- 6. CHAT ALANI ---
-if st.session_state.current_thread_id is None:
-    st.session_state.current_thread_id = str(uuid.uuid4())
+if st.session_state.current_thread_id is None: st.session_state.current_thread_id = str(uuid.uuid4())
 if "chat_session" not in st.session_state or st.session_state.chat_session is None:
     st.session_state.chat_session = model.start_chat(history=[])
 
-# ESKİ GÜZEL KARŞILAMA YAZISI (GERİ GELDİ)
+# KARŞILAMA YAZISI
 if not st.session_state.chat_session.history:
     st.markdown("<br><br><br>", unsafe_allow_html=True)
-    st.markdown(
-        """
-        <div style='text-align: center;'>
-            <h1 style='color: #0E1117; font-size: 3rem;'>Merhaba Printnest Ekibi! 👋</h1>
-            <p style='font-size: 1.5rem; color: #555;'>
-                Ben kurumsal asistanınız. Bugün iş süreçlerinizde size nasıl yardımcı olabilirim?
-            </p>
-        </div>
-        """, 
-        unsafe_allow_html=True
-    )
+    st.markdown("<div style='text-align: center;'><h1 style='font-size: 3rem;'>Merhaba Printnest Ekibi! 👋</h1><p style='font-size: 1.5rem; color: #555;'>Bugün size nasıl yardımcı olabilirim?</p></div>", unsafe_allow_html=True)
 
 for msg in st.session_state.chat_session.history:
-    with st.chat_message("assistant" if msg.role == "model" else "user"):
-        st.markdown(msg.parts[0].text)
+    with st.chat_message("assistant" if msg.role == "model" else "user"): st.markdown(msg.parts[0].text)
 
 if prompt := st.chat_input("Mesajınızı buraya yazın..."):
-    with st.chat_message("user"):
-        st.markdown(prompt)
+    with st.chat_message("user"): st.markdown(prompt)
     save_message_to_db(user_id, st.session_state.current_thread_id, "user", prompt)
     res = st.session_state.chat_session.send_message(prompt)
-    with st.chat_message("assistant"):
-        st.markdown(res.text)
+    with st.chat_message("assistant"): st.markdown(res.text)
     save_message_to_db(user_id, st.session_state.current_thread_id, "model", res.text)

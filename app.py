@@ -10,7 +10,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-st.title("Printnest Corporate AI")
+st.title("💼 Printnest Corporate AI")
 st.write("Welcome to your workspace. How can I assist with your office tasks or printing projects today?")
 
 # --- API Anahtarı Yapılandırması ---
@@ -30,23 +30,30 @@ except Exception as e:
     st.error(f"Yapılandırma hatası: {e}")
     st.stop()
 
-# --- Gemini Model ve Sohbet Oturumu Başlatma ---
+# --- Gemini Model ve Sohbet Oturumu Başlatma (CANLI ARAMA DAHİL) ---
 if "gemini_model" not in st.session_state:
-    st.session_state.gemini_model = genai.GenerativeModel(model_name="models/gemini-2.5-flash")
+    try:
+        # Google Search Retrieval aracını ekleyerek canlı internet erişimi sağlıyoruz
+        st.session_state.gemini_model = genai.GenerativeModel(
+            model_name="gemini-1.5-flash", # Stabil canlı arama desteği için 1.5 sürümü önerilir
+            tools=[{"google_search_retrieval": {}}]
+        )
+    except Exception as e:
+        st.error(f"Model başlatma hatası: {e}")
+        st.stop()
 
 if "chat_session" not in st.session_state:
     # Başlangıçta boş bir geçmişle sohbeti başlatıyoruz
     st.session_state.chat_session = st.session_state.gemini_model.start_chat(history=[])
 
 # --- Sohbet Geçmişini Gösterme ---
-# Gemini'nin kendi tuttuğu history üzerinden mesajları ekrana basıyoruz
 for message in st.session_state.chat_session.history:
     role = "assistant" if message.role == "model" else "user"
     with st.chat_message(role):
         st.markdown(message.parts[0].text)
 
 # --- Kullanıcı Girişi ve Yanıt Üretme ---
-if prompt := st.chat_input("Bir şeyler yazın..."):
+if prompt := st.chat_input("Ask about stock prices, news, or office tasks..."):
     # 1. Kullanıcı mesajını anlık göster
     with st.chat_message("user"):
         st.markdown(prompt)
@@ -61,9 +68,11 @@ if prompt := st.chat_input("Bir şeyler yazın..."):
             response = st.session_state.chat_session.send_message(prompt, stream=True)
             
             for chunk in response:
-                full_response += chunk.text
-                # Yazma efektini simüle et
-                response_placeholder.markdown(full_response + "▌")
+                # Canlı arama kullanıldığında bazı parçalar text içermeyebilir, kontrol ediyoruz
+                if hasattr(chunk, 'text'):
+                    full_response += chunk.text
+                    # Yazma efektini simüle et
+                    response_placeholder.markdown(full_response + "▌")
             
             # Yazma bitince imleci kaldır ve son hali bas
             response_placeholder.markdown(full_response)

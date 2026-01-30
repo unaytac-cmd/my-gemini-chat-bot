@@ -27,6 +27,21 @@ st.markdown("""
     .stButton>button { border-radius: 8px; }
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
+    
+    /* Sidebar alt buton sabitleme */
+    .sidebar-footer {
+        position: fixed;
+        bottom: 25px;
+        width: 260px;
+        background-color: #f8f9fa;
+        padding-top: 10px;
+    }
+    
+    /* Email ve Başlık Ortalama */
+    .centered-text {
+        text-align: center;
+        width: 100%;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -40,7 +55,6 @@ if st.session_state.user is None:
     col1, col2 = st.columns([1, 1], gap="large")
     with col1:
         st.markdown("<br><br># 💼 Printnest.com\n### Kurumsal Yapay Zeka Portalı", unsafe_allow_html=True)
-        st.info("🚀 Giriş yaptıktan sonra asistanınız otomatik olarak hazır olacaktır.")
     with col2:
         st.markdown("<br><br>", unsafe_allow_html=True)
         tab1, tab2 = st.tabs(["🔑 Giriş Yap", "📝 Personel Kaydı"])
@@ -52,8 +66,7 @@ if st.session_state.user is None:
                     user = auth.get_user_by_email(email)
                     st.session_state.user = {"email": email, "uid": user.uid}
                     st.session_state.current_thread_id = str(uuid.uuid4())
-                    time.sleep(0.3)
-                    st.rerun()
+                    time.sleep(0.3); st.rerun()
                 except: st.error("Hatalı giriş.")
         with tab2:
             n_email = st.text_input("Yeni E-posta", key="signup_email")
@@ -62,11 +75,10 @@ if st.session_state.user is None:
             if st.button("Hesap Oluştur", use_container_width=True):
                 m_key = st.secrets.get("CORPORATE_ACCESS_KEY")
                 if access_key != m_key: st.error("Geçersiz Anahtar!")
-                elif len(n_pass) < 6: st.warning("Şifre en az 6 karakter olmalı.")
                 else:
                     try: 
                         auth.create_user(email=n_email, password=n_pass)
-                        st.success("Kayıt başarılı! Giriş yapın.")
+                        st.success("Kayıt başarılı!")
                     except Exception as e: st.error(f"Hata: {e}")
     st.stop()
 
@@ -91,24 +103,35 @@ genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 model = genai.GenerativeModel("models/gemini-2.5-flash")
 
 with st.sidebar:
-    st.markdown("### 💼 Printnest AI")
-    st.markdown(f"<div style='background:#e9ecef;padding:10px;border-radius:10px;margin-bottom:20px;'><small>Aktif:</small><br><b>{st.session_state.user['email']}</b></div>", unsafe_allow_html=True)
+    # Başlık ve Email Ortalı
+    st.markdown(f"""
+        <div class='centered-text'>
+            <h2 style='margin-bottom:0;'>💼 Printnest AI</h2>
+            <p style='color: #555; font-size: 0.9rem;'>{st.session_state.user['email']}</p>
+        </div>
+    """, unsafe_allow_html=True)
+    
     if st.button("➕ Yeni Sohbet", use_container_width=True, type="primary"):
         st.session_state.current_thread_id = str(uuid.uuid4())
         st.session_state.chat_session = None
         st.rerun()
+    
     st.markdown("---")
+    st.markdown("#### 📜 Sohbet Geçmişi")
     user_id = st.session_state.user["uid"]
     for t in get_user_threads(user_id):
         if st.button(f"💬 {t['title']}", key=t['id'], use_container_width=True):
             st.session_state.current_thread_id = t['id']
-            history = load_messages_from_thread(user_id, t['id'])
-            st.session_state.chat_session = model.start_chat(history=history)
+            st.session_state.chat_session = model.start_chat(history=load_messages_from_thread(user_id, t['id']))
             st.rerun()
+
+    # Oturumu Kapat Butonu (En altta, chat bar ile hizalı)
+    st.markdown("<div class='sidebar-footer'>", unsafe_allow_html=True)
     st.divider()
     if st.button("🚪 Oturumu Kapat", use_container_width=True):
         st.session_state.user = None
         st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
 
 # --- 6. CHAT ALANI ---
 if st.session_state.current_thread_id is None:
@@ -116,14 +139,26 @@ if st.session_state.current_thread_id is None:
 if "chat_session" not in st.session_state or st.session_state.chat_session is None:
     st.session_state.chat_session = model.start_chat(history=[])
 
+# ESKİ GÜZEL KARŞILAMA YAZISI (GERİ GELDİ)
 if not st.session_state.chat_session.history:
-    st.markdown("<div style='text-align:center;'><br><br><h1>Merhaba Printnest Ekibi! 👋</h1><p>Bugün nasıl yardımcı olabilirim?</p></div>", unsafe_allow_html=True)
+    st.markdown("<br><br><br>", unsafe_allow_html=True)
+    st.markdown(
+        """
+        <div style='text-align: center;'>
+            <h1 style='color: #0E1117; font-size: 3rem;'>Merhaba Printnest Ekibi! 👋</h1>
+            <p style='font-size: 1.5rem; color: #555;'>
+                Ben kurumsal asistanınız. Bugün iş süreçlerinizde size nasıl yardımcı olabilirim?
+            </p>
+        </div>
+        """, 
+        unsafe_allow_html=True
+    )
 
 for msg in st.session_state.chat_session.history:
     with st.chat_message("assistant" if msg.role == "model" else "user"):
         st.markdown(msg.parts[0].text)
 
-if prompt := st.chat_input("Yazın..."):
+if prompt := st.chat_input("Mesajınızı buraya yazın..."):
     with st.chat_message("user"):
         st.markdown(prompt)
     save_message_to_db(user_id, st.session_state.current_thread_id, "user", prompt)

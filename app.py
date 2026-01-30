@@ -21,40 +21,37 @@ db = firestore.client()
 # --- 2. SAYFA VE SESSION AYARLARI ---
 st.set_page_config(page_title="Printnest AI", page_icon="💼", layout="wide")
 
-# Session State Değişkenlerini Tanımlama (NameError Almamak İçin Şart)
 if "user" not in st.session_state:
     st.session_state.user = None
 if "current_thread_id" not in st.session_state:
     st.session_state.current_thread_id = None
 
-# --- 3. GİRİŞ EKRANI (İKİYE BÖLÜNMÜŞ TASARIM) ---
+# --- 3. GİRİŞ VE KAYIT EKRANI (BÖLÜNMÜŞ TASARIM) ---
 if st.session_state.user is None:
-    # Sayfayı iki sütuna bölüyoruz
     col1, col2 = st.columns([1, 1], gap="large")
 
     with col1:
         st.markdown("""
             # 💼 Printnest.com
-            ### Kurumsal Yapay Zeka Çözümleri
+            ### Kurumsal Yapay Zeka Portalı
             
-            İş süreçlerinizi akıllı asistanlarla optimize edin. Printnest AI, kurumsal verimliliğinizi 
-            artırmak için Gemini teknolojisini kullanır.
+            Printnest çalışanları için özel olarak geliştirilmiş Gemini tabanlı asistan.
             
-            **Öne Çıkan Özellikler:**
-            * 🚀 **Yüksek Hız:** Anlık soru-cevap deneyimi.
-            * 📜 **Akıllı Bellek:** Sohbetleriniz kaydedilir, yarım kalmazsın.
-            * 🛡️ **Güvenlik:** Firebase tabanlı yetkilendirme.
+            **Güvenlik Protokolü:**
+            * 🔑 Kayıt işlemleri sadece kurumsal erişim anahtarı ile yapılabilir.
+            * 🛡️ Verileriniz Firebase üzerinde güvenle saklanır.
+            * 📜 Geçmiş konuşmalarınıza her yerden erişebilirsiniz.
             
             ---
-            *Detaylı bilgi için [printnest.com](https://printnest.com) adresini ziyaret edin.*
+            *Sorularınız için sistem yöneticisine başvurun.*
         """)
 
     with col2:
-        st.subheader("Sisteme Erişin")
-        tab1, tab2 = st.tabs(["🔑 Giriş Yap", "📝 Kayıt Ol"])
+        st.subheader("Erişim Paneli")
+        tab1, tab2 = st.tabs(["🔑 Giriş Yap", "📝 Personel Kaydı"])
         
         with tab1:
-            email = st.text_input("Kurumsal E-posta", key="login_email")
+            email = st.text_input("E-posta", key="login_email")
             password = st.text_input("Şifre", type="password", key="login_pass")
             
             if st.button("Giriş Yap", use_container_width=True, type="primary"):
@@ -62,25 +59,35 @@ if st.session_state.user is None:
                     try:
                         user = auth.get_user_by_email(email)
                         st.session_state.user = {"email": email, "uid": user.uid}
-                        time.sleep(0.3)
+                        time.sleep(0.3) # Safari fix
                         st.rerun() 
                     except:
-                        st.error("Giriş bilgileri hatalı.")
+                        st.error("E-posta veya şifre hatalı.")
                 else:
-                    st.warning("E-posta ve şifre girin.")
+                    st.warning("Lütfen alanları doldurun.")
                     
         with tab2:
             n_email = st.text_input("Yeni E-posta", key="signup_email")
             n_pass = st.text_input("Yeni Şifre", type="password", key="signup_pass")
+            # --- ÖZEL ERİŞİM ANAHTARI ---
+            access_key = st.text_input("Kurumsal Erişim Anahtarı", type="password", help="Sadece Printnest yetkililerinden temine edilebilir.")
+            
             if st.button("Hesap Oluştur", use_container_width=True):
-                try:
-                    auth.create_user(email=n_email, password=n_pass)
-                    st.success("Kayıt başarılı! Giriş yapabilirsiniz.")
-                except Exception as e:
-                    st.error(f"Hata: {e}")
+                if access_key != st.secrets["CORPORATE_ACCESS_KEY"]:
+                    st.error("❌ Geçersiz Erişim Anahtarı! Yetkisiz kayıt engellendi.")
+                elif len(n_pass) < 6:
+                    st.warning("⚠️ Şifre güvenliğiniz için en az 6 karakter olmalıdır.")
+                elif n_email and n_pass:
+                    try:
+                        auth.create_user(email=n_email, password=n_pass)
+                        st.success("✅ Kayıt başarılı! Giriş sekmesinden oturum açın.")
+                    except Exception as e:
+                        st.error(f"Hata: {e}")
+                else:
+                    st.warning("Lütfen tüm bilgileri eksiksiz doldurun.")
     st.stop()
 
-# --- 4. YARDIMCI FONKSİYONLAR ---
+# --- 4. VERİTABANI FONKSİYONLARI ---
 def get_user_threads(user_id):
     threads = db.collection("users").document(user_id).collection("threads").order_by("updated_at", direction=firestore.Query.DESCENDING).stream()
     return [{"id": t.id, "title": t.to_dict().get("title", "Yeni Sohbet")} for t in threads]
@@ -98,54 +105,4 @@ def save_message_to_db(user_id, thread_id, role, text):
             thread_ref.update({"updated_at": datetime.now()})
 
 def load_messages_from_thread(user_id, thread_id):
-    messages = db.collection("users").document(user_id).collection("threads").document(thread_id).collection("messages").order_by("timestamp").stream()
-    return [{"role": "user" if m.to_dict()["role"] == "user" else "model", "parts": [m.to_dict()["text"]]} for m in messages]
-
-# --- 5. MODEL AYARLARI ---
-genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-model = genai.GenerativeModel("models/gemini-2.5-flash")
-
-# --- 6. SIDEBAR ---
-with st.sidebar:
-    st.title("Printnest AI")
-    st.write(f"👤 {st.session_state.user['email']}")
-    
-    if st.button("➕ Yeni Sohbet", use_container_width=True):
-        st.session_state.current_thread_id = str(uuid.uuid4())
-        st.session_state.chat_session = model.start_chat(history=[])
-        st.rerun()
-
-    st.divider()
-    user_id = st.session_state.user["uid"]
-    for t in get_user_threads(user_id):
-        if st.button(f"💬 {t['title']}", key=t['id'], use_container_width=True):
-            st.session_state.current_thread_id = t['id']
-            history = load_messages_from_thread(user_id, t['id'])
-            st.session_state.chat_session = model.start_chat(history=history)
-            st.rerun()
-
-    st.divider()
-    if st.button("🚪 Çıkış Yap", use_container_width=True):
-        st.session_state.user = None
-        st.rerun()
-
-# --- 7. CHAT ---
-if st.session_state.current_thread_id:
-    if "chat_session" not in st.session_state or st.session_state.chat_session is None:
-        st.session_state.chat_session = model.start_chat(history=[])
-
-    for msg in st.session_state.chat_session.history:
-        with st.chat_message("assistant" if msg.role == "model" else "user"):
-            st.markdown(msg.parts[0].text)
-
-    if prompt := st.chat_input("Mesajınızı yazın..."):
-        with st.chat_message("user"):
-            st.markdown(prompt)
-        save_message_to_db(user_id, st.session_state.current_thread_id, "user", prompt)
-        
-        response = st.session_state.chat_session.send_message(prompt)
-        with st.chat_message("assistant"):
-            st.markdown(response.text)
-        save_message_to_db(user_id, st.session_state.current_thread_id, "model", response.text)
-else:
-    st.info("Lütfen soldan bir sohbet seçin veya yeni bir sohbet başlatın.")
+    messages = db.collection("users").document(user_id).collection

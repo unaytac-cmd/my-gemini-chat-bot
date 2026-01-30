@@ -35,12 +35,11 @@ if st.session_state.user is None:
             # 💼 Printnest.com
             ### Kurumsal Yapay Zeka Portalı
             
-            Giriş yaptığınız anda akıllı asistanınız yardıma hazır olacaktır.
+            Printnest ailesine özel geliştirilmiş, iş süreçlerinizi hızlandıran akıllı asistan.
             
-            **Sistem Özellikleri:**
-            * 🚀 **Anında Erişim:** Giriş sonrası otomatik sohbet başlatma.
-            * 🛡️ **Güvenli Kayıt:** Kurumsal erişim anahtarı ile koruma.
-            * 📜 **Bellek:** Geçmiş sohbetlerinize yan menüden ulaşın.
+            **Hızlı Erişim:**
+            * 🚀 Giriş yaptıktan sonra anında sohbete başlayabilirsiniz.
+            * 🛡️ Personel kaydı için kurumsal erişim anahtarı gereklidir.
         """)
 
     with col2:
@@ -56,7 +55,6 @@ if st.session_state.user is None:
                     try:
                         user = auth.get_user_by_email(email)
                         st.session_state.user = {"email": email, "uid": user.uid}
-                        # OTOMATİK BAŞLATMA: Giriş anında yeni bir ID ata
                         st.session_state.current_thread_id = str(uuid.uuid4())
                         time.sleep(0.3)
                         st.rerun() 
@@ -79,7 +77,7 @@ if st.session_state.user is None:
                 elif n_email and n_pass:
                     try:
                         auth.create_user(email=n_email, password=n_pass)
-                        st.success("✅ Kayıt başarılı! Giriş sekmesine geçebilirsiniz.")
+                        st.success("✅ Kayıt başarılı! Giriş yapabilirsiniz.")
                     except Exception as e:
                         st.error(f"Hata: {e}")
     st.stop()
@@ -116,7 +114,7 @@ with st.sidebar:
     
     if st.button("➕ Yeni Sohbet Başlat", use_container_width=True):
         st.session_state.current_thread_id = str(uuid.uuid4())
-        st.session_state.chat_session = None # Oturum tazelensin
+        st.session_state.chat_session = None
         st.rerun()
 
     st.divider()
@@ -125,8 +123,7 @@ with st.sidebar:
     for t in get_user_threads(user_id):
         if st.button(f"💬 {t['title']}", key=t['id'], use_container_width=True):
             st.session_state.current_thread_id = t['id']
-            history = load_messages_from_thread(user_id, t['id'])
-            st.session_state.chat_session = model.start_chat(history=history)
+            st.session_state.chat_session = model.start_chat(history=load_messages_from_thread(user_id, t['id']))
             st.rerun()
 
     st.divider()
@@ -136,13 +133,28 @@ with st.sidebar:
         st.rerun()
 
 # --- 7. CHAT EKRANI ---
-# Eğer bir şekilde thread_id yoksa (örneğin session düştüyse), otomatik oluştur
 if st.session_state.current_thread_id is None:
     st.session_state.current_thread_id = str(uuid.uuid4())
 
-# Sohbet oturumu yoksa başlat
 if "chat_session" not in st.session_state or st.session_state.chat_session is None:
     st.session_state.chat_session = model.start_chat(history=[])
+
+# --- KARŞILAMA MESAJI (EĞER SOHBET YENİYSE) ---
+if not st.session_state.chat_session.history:
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    st.markdown(
+        """
+        <div style='text-align: center;'>
+            <h1 style='color: #0E1117;'>Merhaba Printnest Ekibi! 👋</h1>
+            <p style='font-size: 1.2rem; color: #555;'>
+                Ben kurumsal asistanınız. Bugün iş süreçlerinizde size nasıl yardımcı olabilirim? <br>
+                Rapor analizi, içerik üretimi veya teknik sorularınız için hazırım.
+            </p>
+        </div>
+        """, 
+        unsafe_allow_html=True
+    )
+    st.markdown("<br>", unsafe_allow_html=True)
 
 # Sohbet geçmişini ekrana bas
 for msg in st.session_state.chat_session.history:
@@ -150,7 +162,7 @@ for msg in st.session_state.chat_session.history:
         st.markdown(msg.parts[0].text)
 
 # Yeni mesaj girişi
-if prompt := st.chat_input("Nasıl yardımcı olabilirim?"):
+if prompt := st.chat_input("Mesajınızı buraya yazın..."):
     with st.chat_message("user"):
         st.markdown(prompt)
     save_message_to_db(user_id, st.session_state.current_thread_id, "user", prompt)

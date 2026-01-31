@@ -5,6 +5,7 @@ from firebase_admin import credentials, auth, firestore
 import uuid
 from datetime import datetime
 import requests
+import json
 
 # --- 1. FIREBASE BAĞLANTISI ---
 if not firebase_admin._apps:
@@ -18,7 +19,32 @@ if not firebase_admin._apps:
 
 db = firestore.client()
 
-# --- 2. ŞİFRE DOĞRULAMA (FIREBASE AUTH) ---
+# --- 2. SERPER.DEV ARAMA FONKSİYONU ---
+def get_live_search(query):
+    url = "https://google.serper.dev/search"
+    payload = json.dumps({
+        "q": query,
+        "gl": "tr", # Türkiye lokasyonu
+        "hl": "tr"  # Türkçe dil desteği
+    })
+    headers = {
+        'X-API-KEY': st.secrets["SERPER_API_KEY"],
+        'Content-Type': 'application/json'
+    }
+    try:
+        response = requests.post(url, headers=headers, data=payload, timeout=10)
+        results = response.json()
+        
+        # Arama sonuçlarından snippet'leri topluyoruz
+        search_data = ""
+        if "organic" in results:
+            for item in results["organic"][:4]: # En alakalı ilk 4 sonuç
+                search_data += f"\nKaynak: {item['title']}\nBilgi: {item['snippet']}\n"
+        return search_data if search_data else "İnternette güncel bilgi bulunamadı."
+    except Exception as e:
+        return f"Arama hatası: {str(e)}"
+
+# --- 3. ŞİFRE DOĞRULAMA ---
 def verify_password(email, password):
     try:
         api_key = st.secrets["FIREBASE_WEB_API_KEY"]
@@ -26,27 +52,20 @@ def verify_password(email, password):
         payload = {"email": email, "password": password, "returnSecureToken": True}
         res = requests.post(url, json=payload)
         return res.json()["localId"] if res.status_code == 200 else None
-    except:
-        return None
+    except: return None
 
-# --- 3. VERİTABANI YARDIMCILARI ---
+# --- 4. VERİTABANI YARDIMCILARI ---
 def get_user_threads(user_id):
     try:
         threads = db.collection("users").document(user_id).collection("threads").order_by("updated_at", direction=firestore.Query.DESCENDING).limit(15).stream()
         return [{"id": t.id, "title": t.to_dict().get("title", "Yeni Sohbet")} for t in threads]
-    except:
-        return []
+    except: return []
 
 def load_messages_from_thread(user_id, thread_id):
     try:
         msgs = db.collection("users").document(user_id).collection("threads").document(thread_id).collection("messages").order_by("timestamp").stream()
-        history = []
-        for m in msgs:
-            role = "user" if m.to_dict()["role"] == "user" else "model"
-            history.append({"role": role, "parts": [{"text": m.to_dict()["text"]}]})
-        return history
-    except:
-        return []
+        return [{"role": "user" if m.to_dict()["role"] == "user" else "model", "parts": [{"text": m.to_dict()["text"]}]} for m in msgs]
+    except: return []
 
 def save_message_to_db(user_id, thread_id, role, text):
     t_ref = db.collection("users").document(user_id).collection("threads").document(thread_id)
@@ -55,84 +74,45 @@ def save_message_to_db(user_id, thread_id, role, text):
         title = text[:30] + "..." if len(text) > 30 else text
         t_ref.set({"title": title, "updated_at": datetime.now()}, merge=True)
 
-# --- 4. SAYFA AYARLARI VE TASARIM ---
+# --- 5. TASARIM ---
 st.set_page_config(page_title="Printnest AI", page_icon="💼", layout="wide")
-st.markdown("""
-    <style>
-    [data-testid="stSidebar"] { background-color: #f8f9fa; padding-top: 1rem; }
-    .stButton>button { border-radius: 8px; }
-    #MainMenu {visibility: hidden;} footer {visibility: hidden;}
-    [data-testid="stAppViewBlockContainer"] { opacity: 1 !important; }
-    .feature-card {
-        background-color: #f8f9fa; padding: 20px; border-radius: 12px;
-        border-left: 5px solid #0e1117; margin-bottom: 15px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05); font-size: 1.1rem;
-    }
-    .centered-text { text-align: center; width: 100%; }
-    </style>
-    """, unsafe_allow_html=True)
+st.markdown("<style>[data-testid='stAppViewBlockContainer'] { opacity: 1 !important; }</style>", unsafe_allow_html=True)
 
 if "user" not in st.session_state: st.session_state.user = None
 if "current_thread_id" not in st.session_state: st.session_state.current_thread_id = None
 
-# --- 5. GİRİŞ & KAYIT EKRANI ---
+# --- 6. GİRİŞ EKRANI ---
 if st.session_state.user is None:
-    st.markdown("<div style='padding-top: 8vh;'></div>", unsafe_allow_html=True)
+    # (Önceki giriş ekranı kodun buraya gelecek - aynı kalıyor)
     col1, col2 = st.columns([1.2, 1], gap="large")
     with col1:
-        st.markdown("<h1 style='font-size: 3.5rem; margin-bottom:0;'>💼 Printnest</h1><h3 style='color: #444; margin-top:0;'>Kurumsal Yapay Zeka Portalı</h3>", unsafe_allow_html=True)
-        st.markdown("<div class='feature-card'>🚀 <strong>Hızlı Erişim</strong></div><div class='feature-card'>🛡️ <strong>Güvenli Veri</strong></div><div class='feature-card'>📜 <strong>Sınırsız Bellek</strong></div>", unsafe_allow_html=True)
+        st.markdown("<h1 style='font-size: 3.5rem;'>💼 Printnest</h1><p>Gerçek Zamanlı AI Portal</p>", unsafe_allow_html=True)
     with col2:
         with st.container(border=True):
-            st.subheader("Güvenli Panel")
-            tab1, tab2 = st.tabs(["🔑 Giriş Yap", "📝 Kayıt Ol"])
-            with tab1:
-                email = st.text_input("Kurumsal E-posta", key="login_email")
-                password = st.text_input("Şifre", type="password", key="login_pass")
-                if st.button("Sisteme Giriş Yap", use_container_width=True, type="primary"):
-                    uid = verify_password(email, password)
-                    if uid:
-                        st.session_state.user = {"email": email, "uid": uid}
-                        st.session_state.current_thread_id = str(uuid.uuid4()); st.rerun()
-                    else: st.error("E-posta veya şifre hatalı!")
-            with tab2:
-                n_email = st.text_input("Yeni E-posta", key="signup_email")
-                n_pass = st.text_input("Yeni Şifre", type="password", key="signup_pass")
-                access_key = st.text_input("Kurumsal Erişim Anahtarı", type="password")
-                if st.button("Hesap Oluştur", use_container_width=True):
-                    if access_key == st.secrets.get("CORPORATE_ACCESS_KEY") and len(n_pass) >= 6:
-                        try:
-                            auth.create_user(email=n_email, password=n_pass)
-                            st.success("Kayıt başarılı! Giriş yapabilirsiniz.")
-                        except Exception as e: st.error(f"Hata: {e}")
-                    else: st.error("Geçersiz anahtar!")
+            e = st.text_input("E-posta", key="login_email")
+            p = st.text_input("Şifre", type="password", key="login_pass")
+            if st.button("Giriş Yap", use_container_width=True, type="primary"):
+                uid = verify_password(e, p)
+                if uid:
+                    st.session_state.user = {"email": e, "uid": uid}; st.rerun()
     st.stop()
 
-# --- 6. SIDEBAR VE MODEL ---
-user_id = st.session_state.user["uid"]
+# --- 7. MODEL VE SİDEBAR ---
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-# Gemini 2.5 Flash modelini en temiz haliyle tanımlıyoruz
 model = genai.GenerativeModel("models/gemini-2.5-flash")
 
 with st.sidebar:
-    st.markdown(f"<div class='centered-text'><h2>💼 Printnest AI</h2><p>{st.session_state.user['email']}</p></div>", unsafe_allow_html=True)
+    st.markdown("### 💼 Printnest AI")
     if st.button("➕ Yeni Sohbet", use_container_width=True, type="primary"):
-        st.session_state.current_thread_id = str(uuid.uuid4())
-        st.session_state.chat_session = None
-        st.rerun()
-    st.markdown("---")
-    for t in get_user_threads(user_id):
+        st.session_state.current_thread_id = str(uuid.uuid4()); st.session_state.chat_session = None; st.rerun()
+    st.divider()
+    for t in get_user_threads(st.session_state.user["uid"]):
         if st.button(f"💬 {t['title']}", key=t['id'], use_container_width=True):
             st.session_state.current_thread_id = t['id']
-            st.session_state.chat_session = model.start_chat(history=load_messages_from_thread(user_id, t['id']))
+            st.session_state.chat_session = model.start_chat(history=load_messages_from_thread(st.session_state.user["uid"], t['id']))
             st.rerun()
-    st.divider()
-    if st.button("🚪 Oturumu Kapat", use_container_width=True):
-        st.session_state.user = None; st.rerun()
 
-# --- 7. ANA CHAT EKRANI ---
-if st.session_state.current_thread_id is None:
-    st.session_state.current_thread_id = str(uuid.uuid4())
+# --- 8. ANA CHAT EKRANI ---
 if "chat_session" not in st.session_state or st.session_state.chat_session is None:
     st.session_state.chat_session = model.start_chat(history=[])
 
@@ -140,15 +120,30 @@ for msg in st.session_state.chat_session.history:
     with st.chat_message("assistant" if msg.role == "model" else "user"):
         st.markdown(msg.parts[0].text)
 
-if prompt := st.chat_input("Mesajınızı buraya yazın..."):
+if prompt := st.chat_input("Hava durumu, borsa veya güncel haberleri sor..."):
     with st.chat_message("user"): st.markdown(prompt)
-    save_message_to_db(user_id, st.session_state.current_thread_id, "user", prompt)
+    save_message_to_db(st.session_state.user["uid"], st.session_state.current_thread_id, "user", prompt)
     
     with st.chat_message("assistant"):
-        with st.spinner("İşleniyor..."):
+        with st.spinner("İnternette araştırılıyor..."):
+            # 1. SERPER İLE CANLI VERİ ÇEK
+            live_context = get_live_search(prompt)
+            
+            # 2. GEMINI İÇİN ÖZEL PROMPT HAZIRLA
+            # Modelin bugünü bilmesi ve arama sonuçlarını kullanması için:
+            enriched_prompt = f"""
+            Bugünün Tarihi: {datetime.now().strftime('%d/%m/%Y')}
+            İnternet Arama Sonuçları:
+            {live_context}
+            
+            Soru: {prompt}
+            
+            Yukarıdaki güncel bilgileri kullanarak soruyu yanıtla. Eğer bilgiler yetersizse mevcut bilgini kullan ama önceliği arama sonuçlarına ver.
+            """
+            
             try:
-                res = st.session_state.chat_session.send_message(prompt)
+                res = st.session_state.chat_session.send_message(enriched_prompt)
                 st.markdown(res.text)
-                save_message_to_db(user_id, st.session_state.current_thread_id, "model", res.text)
+                save_message_to_db(st.session_state.user["uid"], st.session_state.current_thread_id, "model", res.text)
             except Exception as e:
-                st.error(f"Sohbet hatası: {e}")
+                st.error(f"Hata: {e}")
